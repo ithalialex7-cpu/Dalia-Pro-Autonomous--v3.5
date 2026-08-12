@@ -8,8 +8,16 @@ import streamlit.components.v1 as components
 import datetime
 import io
 import time
+import sqlite3
+import json
+import base64
 
-DALIA_SVG_ICON = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><defs><linearGradient id='petalGrad' x1='0%' y1='100%' x2='0%' y2='0%'><stop offset='0%' stop-color='%23be185d'/><stop offset='50%' stop-color='%23ec4899'/><stop offset='100%' stop-color='%23f472b6'/></linearGradient><linearGradient id='goldGrad' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%23f43f5e'/><stop offset='50%' stop-color='%23fb7185'/><stop offset='100%' stop-color='%23fda4af'/></linearGradient><path id='textPathTop' d='M 30,100 A 70,70 0 1,1 170,100'/><path id='textPathBottom' d='M 170,100 A 70,70 0 0,1 30,100'/></defs><circle cx='100' cy='100' r='96' fill='%230f172a' stroke='url(%23goldGrad)' stroke-width='5'/><circle cx='100' cy='100' r='88' fill='none' stroke='%23334155' stroke-width='2'/><circle cx='100' cy='100' r='62' fill='none' stroke='url(%23goldGrad)' stroke-width='2'/><text fill='%23ffffff' font-family='Arial, sans-serif' font-weight='bold' font-size='16' letter-spacing='3' text-anchor='middle'><textPath href='%23textPathTop' startOffset='50%'>DALIA PRO</textPath></text><text fill='%23ffffff' font-family='Arial, sans-serif' font-weight='bold' font-size='15' letter-spacing='4' text-anchor='middle'><textPath href='%23textPathBottom' startOffset='50%'>TRADING</textPath></text><g transform='translate(90, 105) scale(0.75)'><g fill='url(%23petalGrad)' stroke='%23831843' stroke-width='1'><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(0)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(30)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(60)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(90)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(120)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(150)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(180)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(210)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(240)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(270)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(300)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(330)'/></g><g fill='%23f472b6' opacity='0.9'><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(15)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(45)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(75)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(105)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(135)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(165)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(195)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(225)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(255)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(285)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(315)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(345)'/></g><circle cx='0' cy='0' r='12' fill='%23fbcfe8' stroke='%23be185d' stroke-width='2'/></g><g><line x1='112' y1='105' x2='112' y2='130' stroke='%234ade80' stroke-width='2'/><rect x='108' y='110' width='8' height='15' fill='%2322c55e' rx='1'/><line x1='124' y1='90' x2='124' y2='122' stroke='%234ade80' stroke-width='2'/><rect x='120' y='95' width='8' height='20' fill='%2322c55e' rx='1'/><line x1='136' y1='75' x2='136' y2='110' stroke='%234ade80' stroke-width='2'/><rect x='132' y='80' width='8' height='22' fill='%2322c55e' rx='1'/></g></svg>"
+# SVG del icono de Dalia Pro
+DALIA_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><defs><linearGradient id='petalGrad' x1='0%' y1='100%' x2='0%' y2='0%'><stop offset='0%' stop-color='#be185d'/><stop offset='50%' stop-color='#ec4899'/><stop offset='100%' stop-color='#f472b6'/></linearGradient><linearGradient id='goldGrad' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='#f43f5e'/><stop offset='50%' stop-color='#fb7185'/><stop offset='100%' stop-color='#fda4af'/></linearGradient><path id='textPathTop' d='M 30,100 A 70,70 0 1,1 170,100'/><path id='textPathBottom' d='M 170,100 A 70,70 0 0,1 30,100'/></defs><circle cx='100' cy='100' r='96' fill='#0f172a' stroke='url(#goldGrad)' stroke-width='5'/><circle cx='100' cy='100' r='88' fill='none' stroke='#334155' stroke-width='2'/><circle cx='100' cy='100' r='62' fill='none' stroke='url(#goldGrad)' stroke-width='2'/><text fill='#ffffff' font-family='Arial, sans-serif' font-weight='bold' font-size='16' letter-spacing='3' text-anchor='middle'><textPath href='#textPathTop' startOffset='50%'>DALIA PRO</textPath></text><text fill='#ffffff' font-family='Arial, sans-serif' font-weight='bold' font-size='15' letter-spacing='4' text-anchor='middle'><textPath href='#textPathBottom' startOffset='50%'>TRADING</textPath></text><g transform='translate(90, 105) scale(0.75)'><g fill='url(#petalGrad)' stroke='#831843' stroke-width='1'><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(0)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(30)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(60)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(90)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(120)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(150)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(180)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(210)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(240)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(270)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(300)'/><path d='M0,0 C-12,-25 -12,-45 0,-55 C12,-45 12,-25 0,0' transform='rotate(330)'/></g><g fill='#f472b6' opacity='0.9'><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(15)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(45)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(75)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(105)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(135)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(165)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(195)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(225)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(255)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(285)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(315)'/><path d='M0,0 C-8,-18 -8,-35 0,-42 C8,-35 8,-18 0,0' transform='rotate(345)'/></g><circle cx='0' cy='0' r='12' fill='#fbcfe8' stroke='#be185d' stroke-width='2'/></g><g><line x1='112' y1='105' x2='112' y2='130' stroke='#4ade80' stroke-width='2'/><rect x='108' y='110' width='8' height='15' fill='#22c55e' rx='1'/><line x1='124' y1='90' x2='124' y2='122' stroke='#4ade80' stroke-width='2'/><rect x='120' y='95' width='8' height='20' fill='#22c55e' rx='1'/><line x1='136' y1='75' x2='136' y2='110' stroke='#4ade80' stroke-width='2'/><rect x='132' y='80' width='8' height='22' fill='#22c55e' rx='1'/></g></svg>"""
+
+# Conversión a Data URI
+b64_svg = base64.b64encode(DALIA_SVG.encode('utf-8')).decode('utf-8')
+DALIA_SVG_ICON = f"data:image/svg+xml;base64,{b64_svg}"
 
 st.set_page_config(
     page_title="Dalia Pro Autonomous Institutional Engine",
@@ -17,33 +25,105 @@ st.set_page_config(
     page_icon=DALIA_SVG_ICON
 )
 
-# Inject favicon into browser tab dynamically
+# Inyección Robusta PWA / Favicon / Apple Touch Icon en el Documento Raíz
 components.html(f"""
     <script>
-    const svgData = `{DALIA_SVG_ICON}`;
-    function injectPngAppIcons() {{
-        const parentHead = window.parent.document.getElementsByTagName('head')[0];
-        if (!parentHead) return;
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-        img.onload = function() {{
-            const canvas = document.createElement('canvas');
-            canvas.width = 512; canvas.height = 512;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, 512, 512);
-            const pngUrl = canvas.toDataURL('image/png');
-            let favIcon = window.parent.document.querySelector("link[rel='icon']");
-            if (!favIcon) {{
-                favIcon = window.parent.document.createElement('link');
-                favIcon.rel = 'icon'; favIcon.type = 'image/png';
-                parentHead.appendChild(favIcon);
+    (function() {{
+        const svgData = "{DALIA_SVG_ICON}";
+        
+        function injectPwaManifestAndIcons() {{
+            try {{
+                const targetDoc = window.top.document || window.parent.document;
+                if (!targetDoc) return;
+                
+                const head = targetDoc.getElementsByTagName('head')[0];
+                if (!head) return;
+
+                // 1. Remover elementos previos de Streamlit que puedan forzar el icono rojo/rojo-blanco
+                const oldIcons = targetDoc.querySelectorAll("link[rel*='icon'], link[rel='manifest'], link[rel*='apple']");
+                oldIcons.forEach(el => el.remove());
+
+                // 2. Crear Canvas para renderizar PNG nativo a 512x512 (Requerido para instalación en Android/iOS)
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.onload = function() {{
+                    const canvas = targetDoc.createElement('canvas');
+                    canvas.width = 512;
+                    canvas.height = 512;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, 512, 512);
+                    const pngDataUrl = canvas.toDataURL('image/png');
+
+                    // Asignar Favicons e Icono de Pantalla de Inicio Apple
+                    const iconRels = ['icon', 'shortcut icon', 'apple-touch-icon', 'apple-touch-icon-precomposed'];
+                    iconRels.forEach(relType => {{
+                        let l = targetDoc.createElement('link');
+                        l.rel = relType;
+                        l.type = 'image/png';
+                        l.sizes = '512x512';
+                        l.href = pngDataUrl;
+                        head.appendChild(l);
+                    }});
+
+                    // 3. Crear Web App Manifest Dinámico
+                    const manifestObj = {{
+                        "name": "Dalia Pro Trading Engine",
+                        "short_name": "Dalia Pro",
+                        "description": "Dalia Pro Autonomous Institutional Trading Platform",
+                        "start_url": targetDoc.location.href,
+                        "display": "standalone",
+                        "background_color": "#0b0f19",
+                        "theme_color": "#0b0f19",
+                        "icons": [
+                            {{
+                                "src": pngDataUrl,
+                                "sizes": "512x512",
+                                "type": "image/png",
+                                "purpose": "any maskable"
+                            }}
+                        ]
+                    }};
+
+                    const manifestString = JSON.stringify(manifestObj);
+                    const blob = new Blob([manifestString], {{type: 'application/json'}});
+                    const manifestUrl = URL.createObjectURL(blob);
+
+                    let mLink = targetDoc.createElement('link');
+                    mLink.rel = 'manifest';
+                    mLink.href = manifestUrl;
+                    head.appendChild(mLink);
+
+                    // 4. Configurar Meta Tags PWA Móviles
+                    const metaList = [
+                        {{ name: 'apple-mobile-web-app-capable', content: 'yes' }},
+                        {{ name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' }},
+                        {{ name: 'apple-mobile-web-app-title', content: 'Dalia Pro' }},
+                        {{ name: 'mobile-web-app-capable', content: 'yes' }},
+                        {{ name: 'theme-color', content: '#0b0f19' }}
+                    ];
+
+                    metaList.forEach(m => {{
+                        let tag = targetDoc.querySelector(`meta[name='${{m.name}}']`);
+                        if (!tag) {{
+                            tag = targetDoc.createElement('meta');
+                            tag.name = m.name;
+                            head.appendChild(tag);
+                        }}
+                        tag.content = m.content;
+                    }});
+                }};
+                img.src = svgData;
+            }} catch (e) {{
+                console.error("Error al inyectar PWA Manifest de Dalia Pro:", e);
             }}
-            favIcon.href = pngUrl;
-        }};
-        img.src = svgData;
-    }}
-    if (window.parent.document.readyState === 'complete') {{ injectPngAppIcons(); }}
-    else {{ window.parent.addEventListener('DOMContentLoaded', injectPngAppIcons); }}
+        }}
+
+        // Re-inyección periódica para asegurar reemplazo continuo sobre el renderizado de Streamlit
+        injectPwaManifestAndIcons();
+        setTimeout(injectPwaManifestAndIcons, 500);
+        setTimeout(injectPwaManifestAndIcons, 1500);
+        setTimeout(injectPwaManifestAndIcons, 3000);
+    }})();
     </script>
 """, height=0, width=0)
 
@@ -55,6 +135,10 @@ if 'paper_positions' not in st.session_state:
     st.session_state['paper_positions'] = []
 if 'cash_balance' not in st.session_state:
     st.session_state['cash_balance'] = 100000.0
+if 'db_initialized' not in st.session_state:
+    st.session_state['db_initialized'] = False
+if 'backtest_ran' not in st.session_state:
+    st.session_state['backtest_ran'] = False
 
 st.markdown("""
     <style>
@@ -93,13 +177,12 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
-    .indicator-badge {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        font-weight: bold;
-        margin-right: 6px;
+    .roadmap-card {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+        border: 1px solid #312e81;
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 18px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -208,49 +291,39 @@ def obtener_datos(symbol, tf):
         if df.empty: return df
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             
-        # 1. Medias Móviles Institucionales
         df['SMA_20'] = df['Close'].rolling(window=20).mean()
         df['SMA_50'] = df['Close'].rolling(window=50).mean()
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
-        # 2. VWAP e Historial de Desviación Estándar
         tp = (df['High'] + df['Low'] + df['Close']) / 3
         df['VWAP'] = (tp * df['Volume']).cumsum() / df['Volume'].cumsum()
         vwap_var = ((tp - df['VWAP']) ** 2 * df['Volume']).cumsum() / df['Volume'].cumsum()
         vwap_std = np.sqrt(np.maximum(0, vwap_var))
         df['VWAP_Upper_1'] = df['VWAP'] + vwap_std
         df['VWAP_Lower_1'] = df['VWAP'] - vwap_std
-        df['VWAP_Upper_2'] = df['VWAP'] + (2 * vwap_std)
-        df['VWAP_Lower_2'] = df['VWAP'] - (2 * vwap_std)
 
-        # 3. Bandas de Bollinger (20, 2)
         std_20 = df['Close'].rolling(window=20).std()
         df['Bollinger_Upper'] = df['SMA_20'] + (2 * std_20)
         df['Bollinger_Lower'] = df['SMA_20'] - (2 * std_20)
-        df['Bollinger_Bandwidth'] = ((df['Bollinger_Upper'] - df['Bollinger_Lower']) / df['SMA_20']) * 100
 
-        # 4. ATR (Average True Range)
         high_low = df['High'] - df['Low']
         high_close = (df['High'] - df['Close'].shift()).abs()
         low_close = (df['Low'] - df['Close'].shift()).abs()
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         df['ATR'] = tr.rolling(window=14).mean()
 
-        # 5. MACD e Histograma
         exp1 = df['Close'].ewm(span=12, adjust=False).mean()
         exp2 = df['Close'].ewm(span=26, adjust=False).mean()
         df['MACD'] = exp1 - exp2
         df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
         df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
         
-        # 6. RSI (Relative Strength Index)
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / (loss + 1e-9)
         df['RSI'] = 100 - (100 / (1 + rs))
 
-        # 7. ADX + DI+ / DI-
         up_move = df['High'] - df['High'].shift(1)
         down_move = df['Low'].shift(1) - df['Low']
         plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
@@ -264,11 +337,6 @@ def obtener_datos(symbol, tf):
         df['plus_DI'] = plus_di
         df['minus_DI'] = minus_di
 
-        # 8. Canales Break Points (Donchian)
-        df['Resistencia_BP'] = df['High'].rolling(window=20).max().shift(1)
-        df['Soporte_BP'] = df['Low'].rolling(window=20).min().shift(1)
-
-        # 9. Point of Control (POC - Volume Profile)
         if len(df) >= 20:
             hist, bin_edges = np.histogram(df['Close'].tail(50), bins=15, weights=df['Volume'].tail(50))
             poc_index = np.argmax(hist)
@@ -388,7 +456,7 @@ def simular_monte_carlo(df, num_sims=1000, num_dias=30):
         'max_drawdown': round(max_drawdown, 2)
     }
 
-tab_main, tab_indicators, tab_ml_mc, tab_gex, tab_options, tab_radar, tab_hardware, tab_journal = st.tabs([
+tab_main, tab_indicators, tab_ml_mc, tab_gex, tab_options, tab_radar, tab_hardware, tab_journal, tab_roadmap = st.tabs([
     "🎯 Copiloto & Centro de Control",
     "🔬 Panel de Indicadores & MTF",
     "🧠 Machine Learning & Monte Carlo",
@@ -396,7 +464,8 @@ tab_main, tab_indicators, tab_ml_mc, tab_gex, tab_options, tab_radar, tab_hardwa
     "⛓️ Cadena Opciones & Max Pain",
     "👁️ Auto-Screener Radar MTF",
     "🔊 Alertas Hardware Directas",
-    "📒 Diario, Paper Trading & VaR"
+    "📒 Diario, Paper Trading & VaR",
+    "🗺️ Hoja de Ruta Sugerida"
 ])
 
 data = obtener_datos(ticker, tf_map[temporalidad])
@@ -414,7 +483,6 @@ with tab_main:
         macd_hist = float(data['MACD_Hist'].dropna().iloc[-1]) if not data['MACD_Hist'].dropna().empty else 0.0
         poc_actual = float(data['POC'].dropna().iloc[-1]) if not data['POC'].dropna().empty else precio_actual
 
-        # Algoritmo de Confluencia Multivariable Avanzado
         prob_alcista = 50.0
         prob_alcista += 15.0 if precio_actual > ema_200 else -15.0
         prob_alcista += 10.0 if precio_actual > vwap_actual else -10.0
@@ -441,7 +509,6 @@ with tab_main:
             </div>
         """, unsafe_allow_html=True)
 
-        # Módulo Human-in-the-Loop Auto-Execution
         st.markdown("<div class='hitl-container'>", unsafe_allow_html=True)
         st.subheader("🤖 Human-in-the-Loop: Módulo de Aprobación Autónomo")
         
@@ -460,7 +527,7 @@ with tab_main:
                 st.info("⌛ **Grace Period Activo:** Transmitiendo orden al Broker en 15 segundos si no se cancela.")
             
             b_col1, b_col2, b_col3 = st.columns([2, 2, 3])
-            if b_col1.button("✅ Aprobar & Enviar Orden Instantáneamente", width="stretch"):
+            if b_col1.button("✅ Confirmar y Aprobar Orden Instantáneamente", key="btn_confirm_order", width="stretch"):
                 qty_calc = int((capital * (riesgo_pct/100)) / (1.5 * atr_actual))
                 order_item = {
                     'Hora': datetime.datetime.now().strftime("%H:%M:%S"),
@@ -477,9 +544,9 @@ with tab_main:
                 if activar_sonido:
                     emitir_alerta_sonora(tipo_sonido="chime", titulo=f"⚡ ORDEN EJECUTADA: {ticker}", mensaje=f"Posición {'CALL' if es_call else 'PUT'} enviada a {broker_target}")
                 st.balloons()
-                st.success(f"⚡ ¡Orden enviada exitosamente a **{broker_target}**!")
+                st.success(f"⚡ ¡Orden confirmada y enviada a **{broker_target}**!")
             
-            if b_col2.button("🛑 Cancelar Orden (Abortar)", width="stretch"):
+            if b_col2.button("🛑 Cancelar Orden (Abortar)", key="btn_cancel_order", width="stretch"):
                 st.warning("Operación cancelada por el usuario.")
             
             with b_col3:
@@ -493,11 +560,10 @@ with tab_main:
                     "take_profit": round(precio_actual + (2.5*atr_actual) if es_call else precio_actual - (2.5*atr_actual), 2)
                 })
         else:
-            st.info("⚖️ El mercado cotiza en rango neutro. Espere la alineación de confluencia con probabilidad $\ge 70\%$ o $\le 30\%$.")
+            st.info("⚖️ El mercado cotiza en rango neutro. Espere la alineación de confluencia con probabilidad >= 70% o <= 30%.")
             
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Copiloto Narrativo IA
         st.subheader("💬 Resumen Ejecutivo Narrativo de IA")
         narrativa = f"El activo **{ticker}** registra un precio de **${precio_actual:.2f}**, cotizando {'por encima' if precio_actual > vwap_actual else 'por debajo'} del VWAP de la sesión (${vwap_actual:.2f}) y del Point of Control (POC) en **${poc_actual:.2f}**. "
         narrativa += f"El indicador ADX marca **{adx_actual:.1f}**, señalando una tendencia {'fuerte e institucional' if adx_actual >= 25 else 'en consolidación/lateral'}. "
@@ -512,7 +578,6 @@ with tab_main:
             row_heights=[0.6, 0.2, 0.2]
         )
         
-        # Candle & Main Overlay
         fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="Precio"), row=1, col=1)
         fig.add_trace(go.Scatter(x=data.index, y=data['EMA_200'], line=dict(color='#ec4899', width=1.5), name="EMA 200"), row=1, col=1)
         fig.add_trace(go.Scatter(x=data.index, y=data['VWAP'], line=dict(color='#38bdf8', width=1.5), name="VWAP"), row=1, col=1)
@@ -521,12 +586,10 @@ with tab_main:
         fig.add_trace(go.Scatter(x=data.index, y=data['Bollinger_Upper'], line=dict(color='rgba(255,255,255,0.4)', width=1), name="Bollinger Sup"), row=1, col=1)
         fig.add_trace(go.Scatter(x=data.index, y=data['Bollinger_Lower'], line=dict(color='rgba(255,255,255,0.4)', width=1), name="Bollinger Inf"), row=1, col=1)
         
-        # MACD Subplot
         fig.add_trace(go.Bar(x=data.index, y=data['MACD_Hist'], marker_color=np.where(data['MACD_Hist'] > 0, '#22c55e', '#ef4444'), name="MACD Hist"), row=2, col=1)
         fig.add_trace(go.Scatter(x=data.index, y=data['MACD'], line=dict(color='#38bdf8', width=1), name="MACD"), row=2, col=1)
         fig.add_trace(go.Scatter(x=data.index, y=data['MACD_Signal'], line=dict(color='#f43f5e', width=1), name="Signal"), row=2, col=1)
 
-        # ADX / Volume Subplot
         fig.add_trace(go.Scatter(x=data.index, y=data['ADX'], line=dict(color='#f59e0b', width=1.5), name="ADX (Fuerza)"), row=3, col=1)
         fig.add_trace(go.Scatter(x=data.index, y=data['plus_DI'], line=dict(color='#22c55e', width=1), name="+DI"), row=3, col=1)
         fig.add_trace(go.Scatter(x=data.index, y=data['minus_DI'], line=dict(color='#ef4444', width=1), name="-DI"), row=3, col=1)
@@ -560,225 +623,142 @@ with tab_indicators:
         df_ind_summary = pd.DataFrame([
             {"Indicador": "EMA 200 (Tendencia Primaria)", "Valor": f"${ema_200:.2f}", "Estado": "🟢 Alcista" if precio_actual > ema_200 else "🔴 Bajista"},
             {"Indicador": "VWAP (Precio Ponderado)", "Valor": f"${vwap_actual:.2f}", "Estado": "🟢 Compradores" if precio_actual > vwap_actual else "🔴 Vendedores"},
-            {"Indicador": "Point of Control (POC)", "Valor": f"${poc_actual:.2f}", "Estado": "🟢 Arriba del Nodo" if precio_actual > poc_actual else "🔴 Abajo del Nodo"},
-            {"Indicador": "ADX (Fuerza Institucional)", "Valor": f"{adx_actual:.1f}", "Estado": "⚡ Tendencia Fuerte" if adx_actual >= 25 else "💤 Consolidación"},
-            {"Indicador": "Directional Movement (+DI vs -DI)", "Valor": f"+DI: {plus_di:.1f} | -DI: {minus_di:.1f}", "Estado": "🟢 Presión Alcista" if plus_di > minus_di else "🔴 Presión Bajista"},
-            {"Indicador": "MACD Histogram", "Valor": f"{macd_hist:.3f}", "Estado": "🟢 Impulso Positivo" if macd_hist > 0 else "🔴 Impulso Negativo"},
-            {"Indicador": "ATR (14) - Volatilidad Promedio", "Valor": f"${atr_actual:.2f}", "Estado": "📐 Rango Operativo Esperado"}
+            {"Indicador": "Point of Control (POC)", "Valor": f"${poc_actual:.2f}", "Estado": "🟢 Arriba del Nodo" if precio_actual > poc_actual else "🔴 Debajo del Nodo"},
+            {"Indicador": "ADX Trend Strength", "Valor": f"{adx_actual:.1f}", "Estado": "🔥 Tendencia Fuerte" if adx_actual >= 25 else "💤 Consolidación"},
+            {"Indicador": "RSI Oscillator", "Valor": f"{rsi_actual:.1f}", "Estado": "⚠️ Sobrecompra" if rsi_actual > 70 else ("⚠️ Sobreventa" if rsi_actual < 30 else "✅ Neutral")},
+            {"Indicador": "MACD Histogram", "Valor": f"{macd_hist:.4f}", "Estado": "🟢 Impulso Positivo" if macd_hist > 0 else "🔴 Impulso Negativo"}
         ])
         st.table(df_ind_summary)
 
 with tab_ml_mc:
-    st.subheader(f"🧠 Pillar I: Motor de Machine Learning & Simulaciones Monte Carlo — {ticker}")
-    col_mc1, col_mc2 = st.columns([1, 2])
-    with col_mc1:
-        st.markdown("### 🧪 Parámetros del Simulador Monte Carlo")
-        sims_cnt = st.slider("Número de Senda Simulas (Monte Carlo)", 100, 2000, 1000, 100)
-        dias_horizonte = st.slider("Horizonte Futuro (Días)", 5, 60, 30, 5)
-        if not data.empty:
-            mc_res = simular_monte_carlo(data, num_sims=sims_cnt, num_dias=dias_horizonte)
-            if mc_res:
-                st.metric("Precio Esperado (Media)", f"${mc_res['expected_price']}")
-                st.metric("Value at Risk (VaR 95%)", f"${mc_res['var_95']}")
-                st.metric("Máximo Drawdown Esperado", f"{mc_res['max_drawdown']}%")
-                
-        st.markdown("---")
-        st.markdown("### 🌲 Importancia de Variables (Feature Importance Model)")
-        feat_df = pd.DataFrame([
-            {"Variable": "VWAP Distance", "Peso": "32%"},
-            {"Variable": "RSI (14)", "Peso": "24%"},
-            {"Variable": "ADX Trend Power", "Peso": "20%"},
-            {"Variable": "EMA 200 Spread", "Peso": "14%"},
-            {"Variable": "Volume POC Peak", "Peso": "10%"}
-        ])
-        st.dataframe(feat_df, width="stretch")
-
-    with col_mc2:
-        if not data.empty and mc_res:
-            fig_mc = go.Figure()
-            for i in range(min(120, sims_cnt)):
-                fig_mc.add_trace(go.Scatter(y=mc_res['simulations'][:, i], mode='lines', line=dict(width=0.5, color='rgba(99, 102, 241, 0.15)'), showlegend=False))
-            fig_mc.add_trace(go.Scatter(y=np.mean(mc_res['simulations'], axis=1), mode='lines', line=dict(color='#22c55e', width=3), name="Senda Media"))
-            fig_mc.update_layout(height=380, template="plotly_dark", title=f"Simulación Monte Carlo ({sims_cnt} Proyecciones)", margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(fig_mc, width="stretch")
+    st.subheader(f"🧠 Simulaciones Monte Carlo & Proyecciones Estocásticas — {ticker}")
+    if not data.empty:
+        col_mc1, col_mc2 = st.columns([1, 2])
+        with col_mc1:
+            st.markdown("#### ⚙️ Parámetros de Simulación")
+            n_sims = st.slider("Número de Simulaciones", 100, 2000, 500, step=100)
+            n_days = st.slider("Horizonte Temporal (Días)", 5, 90, 30, step=5)
             
-            # Histogram of distribution
-            fig_hist = go.Figure(data=[go.Histogram(x=mc_res['final_prices'], nbinsx=30, marker_color='#6366f1')])
-            fig_hist.update_layout(height=220, template="plotly_dark", title="Distribución de Precios Finales (Risk Curve)", margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(fig_hist, width="stretch")
+            mc_results = simular_monte_carlo(data, num_sims=n_sims, num_dias=n_days)
+            if mc_results:
+                st.metric("Precio Esperado (Media)", f"${mc_results['expected_price']}")
+                st.metric("Value at Risk (VaR 95%)", f"${mc_results['var_95']}")
+                st.metric("Drawdown Máximo Estimado", f"{mc_results['max_drawdown']}%")
+
+        with col_mc2:
+            if mc_results:
+                fig_mc = go.Figure()
+                time_axis = list(range(n_days))
+                for i in range(min(n_sims, 100)):
+                    fig_mc.add_trace(go.Scatter(x=time_axis, y=mc_results['simulations'][:, i], mode='lines', line=dict(width=0.5), showlegend=False, opacity=0.3))
+                
+                mean_path = np.mean(mc_results['simulations'], axis=1)
+                fig_mc.add_trace(go.Scatter(x=time_axis, y=mean_path, mode='lines', line=dict(color='#ec4899', width=3), name='Trayectoria Media'))
+                fig_mc.update_layout(title="Simulación Monte Carlo (100 Trayectorias Ilustrativas)", template="plotly_dark", height=450)
+                st.plotly_chart(fig_mc, width="stretch")
 
 with tab_gex:
-    st.subheader(f"🔬 Pillar II: Exposición Gamma (GEX) & Order Flow Dynamic — {ticker}")
+    st.subheader(f"📊 Gamma Exposure (GEX) & Order Flow — {ticker}")
     if not data.empty:
-        p_act = float(data['Close'].iloc[-1])
-        gex_info = calcular_gex_y_gamma_flip(ticker, p_act)
+        gex_info = calcular_gex_y_gamma_flip(ticker, precio_actual)
         if gex_info:
-            gx1, gx2, gx3 = st.columns(3)
-            gx1.metric("GEX Total Mercado ($)", f"${gex_info['total_gex']}M")
-            gx2.metric("Gamma Flip Level", f"${gex_info['gamma_flip']}")
-            gx3.metric("Estatus del Régimen", gex_info['regime'])
-            
-            st.markdown("---")
-            st.markdown("### 📊 Visualizador de Order Flow & Delta Imbalance (Footprint Simulator)")
-            
-            of_col1, of_col2 = st.columns(2)
-            with of_col1:
-                st.write("🧱 **Muros de Liquidez Detectados (Order Book Depth)**")
-                depth_df = pd.DataFrame([
-                    {"Tipo": "Muro de Venta (Ask Wall)", "Precio Strike": f"${p_act * 1.03:.2f}", "Volumen Acumulado": "14,250 Contratos"},
-                    {"Tipo": "Muro de Compra (Bid Wall)", "Precio Strike": f"${p_act * 0.97:.2f}", "Volumen Acumulado": "18,900 Contratos"},
-                    {"Tipo": "Absorption Cluster", "Precio Strike": f"${poc_actual:.2f}", "Volumen Acumulado": "25,400 Contratos"}
-                ])
-                st.table(depth_df)
-                
-            with of_col2:
-                st.write("⚖️ **Delta Imbalance Compradores vs Vendedores**")
-                fig_of = go.Figure(go.Bar(
-                    x=['Institutional Buyers', 'Institutional Sellers'],
-                    y=[62, 38],
-                    marker_color=['#22c55e', '#ef4444']
-                ))
-                fig_of.update_layout(height=220, template="plotly_dark", title="Presión de Flujo de Ordenes (%)", margin=dict(l=10, r=10, t=30, b=10))
-                st.plotly_chart(fig_of, width="stretch")
+            g1, g2, g3 = st.columns(3)
+            g1.metric("Total GEX Estimate", f"${gex_info['total_gex']}M")
+            g2.metric("Gamma Flip Level", f"${gex_info['gamma_flip']}")
+            g3.metric("Régimen de Mercado", "Long Gamma" if gex_info['total_gex'] > 0 else "Short Gamma")
+            st.info(f"📌 **Régimen Detectado:** {gex_info['regime']}")
+        else:
+            st.warning("No se pudieron calcular los datos de Gamma Exposure para este activo o temporalidad.")
 
 with tab_options:
-    st.subheader(f"📊 Pillar II & IV: Cadena de Opciones & Inflexión Max Pain — {ticker}")
+    st.subheader(f"⛓️ Cadena de Opciones & Estructura Max Pain — {ticker}")
     if not data.empty:
-        p_act_opt = float(data['Close'].iloc[-1])
-        opt_data = obtener_cadena_opciones_y_max_pain(ticker, p_act_opt)
-        if opt_data:
-            op1, op2, op3, op4 = st.columns(4)
-            op1.metric("Expiración Próxima", opt_data['exp_date'])
-            op2.metric("Max Pain Strike", f"${opt_data['max_pain']:.2f}")
-            op3.metric("Put/Call Ratio (PCR)", f"{opt_data['pcr']}")
-            op4.metric("Volatilidad Implícita (IV)", f"{opt_data['avg_iv']}%")
+        opt_info = obtener_cadena_opciones_y_max_pain(ticker, precio_actual)
+        if opt_info:
+            o1, o2, o3, o4 = st.columns(4)
+            o1.metric("Expiración Cercana", opt_info['exp_date'])
+            o2.metric("Max Pain Strike", f"${opt_info['max_pain']}")
+            o3.metric("Put/Call Ratio (OI)", opt_info['pcr'])
+            o4.metric("IV Promedio", f"{opt_info['avg_iv']}%")
 
-            st.markdown("---")
-            st.markdown("### ⛓️ Detalle de Interés Abierto (Open Interest Strike Chart)")
-            df_opt = opt_data['df_opt']
-            
             fig_opt = go.Figure()
+            df_opt = opt_info['df_opt']
             fig_opt.add_trace(go.Bar(x=df_opt['strike'], y=df_opt['Call_OI'], name='Call Open Interest', marker_color='#22c55e'))
             fig_opt.add_trace(go.Bar(x=df_opt['strike'], y=df_opt['Put_OI'], name='Put Open Interest', marker_color='#ef4444'))
-            fig_opt.add_vline(x=opt_data['max_pain'], line_dash="dash", line_color="#f59e0b", annotation_text="Max Pain Strike")
-            fig_opt.update_layout(height=400, barmode='group', template="plotly_dark", title="Open Interest por Strike Price", margin=dict(l=10, r=10, t=30, b=10))
+            fig_opt.add_vline(x=precio_actual, line_dash="dash", line_color="white", annotation_text="Precio Actual")
+            fig_opt.add_vline(x=opt_info['max_pain'], line_dash="solid", line_color="#f59e0b", annotation_text="Max Pain")
+            fig_opt.update_layout(barmode='group', template="plotly_dark", height=450, title="Distribución de Open Interest por Strike")
             st.plotly_chart(fig_opt, width="stretch")
+        else:
+            st.warning("No se encontraron cadenas de opciones válidas para este activo.")
 
 with tab_radar:
-    st.subheader("👁️ Pillar V: Auto-Screener & Radar de Oportunidades Multi-Activo")
-    st.write("Escaneo automático de activos de alta liquidez con puntuación cuantitativa en vivo:")
+    st.subheader("👁️ Auto-Screener Radar MTF Multi-Activo")
+    st.write("Exploración en tiempo real de confluencia técnica en activos clave:")
     
-    activos = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "SPY", "QQQ", "BTC-USD"]
-    cols = st.columns(4)
-    for idx, a in enumerate(activos):
-        with cols[idx % 4]:
-            d_a = obtener_datos(a, "5m")
-            if not d_a.empty:
-                pa = float(d_a['Close'].iloc[-1])
-                ema = float(d_a['EMA_200'].iloc[-1])
-                rsi = float(d_a['RSI'].dropna().iloc[-1])
-                p_score = 50 + (20 if pa > ema else -15) + (15 if rsi < 35 else (-15 if rsi > 65 else 0))
-                st.metric(a, f"${pa:.2f}", delta=f"{p_score:.0f}% Score IA ({'CALL' if p_score>=50 else 'PUT'})")
+    radar_tickers = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "GOOGL", "SPY", "QQQ"]
+    if st.button("🔄 Ejecutar Escáner Multi-Activo"):
+        radar_results = []
+        progress_bar = st.progress(0)
+        for idx, t_symbol in enumerate(radar_tickers):
+            df_t = obtener_datos(t_symbol, "5m")
+            if not df_t.empty:
+                c_p = float(df_t['Close'].iloc[-1])
+                ema_p = float(df_t['EMA_200'].dropna().iloc[-1]) if not df_t['EMA_200'].dropna().empty else c_p
+                rsi_p = float(df_t['RSI'].dropna().iloc[-1]) if not df_t['RSI'].dropna().empty else 50
+                bias_p = "🟢 CALL" if c_p > ema_p else "🔴 PUT"
+                radar_results.append({
+                    "Ticker": t_symbol,
+                    "Precio": f"${c_p:.2f}",
+                    "Sesgo 5m": bias_p,
+                    "RSI": f"{rsi_p:.1f}",
+                    "Estado": "⚡ En Tendencia" if rsi_p > 60 or rsi_p < 40 else "💤 Consolidación"
+                })
+            progress_bar.progress((idx + 1) / len(radar_tickers))
+        st.table(pd.DataFrame(radar_results))
 
 with tab_hardware:
-    st.subheader("🔊 Pillar III: Panel de Alertas Directas al Hardware del Dispositivo en Uso")
-    st.write("Configuración y prueba de alertas de sonido, vibración háptica y notificaciones del sistema operativo activas en tu equipo (Surface / PC / Laptop / Móvil):")
-
-    col_hw1, col_hw2 = st.columns(2)
-
-    with col_hw1:
-        st.markdown("### 📢 Probar Sonidos Sintetizados en Altavoces")
-        st.write("Generación directa en los altavoces de tu equipo mediante **Web Audio API**:")
-
-        if st.button("🔔 Tono 1: Tri-Tono Institucional (Predeterminado)", width="stretch"):
-            emitir_alerta_sonora("institucional", "🚨 Dalia Pro - Prueba", "Tri-tono institucional activado en los altavoces de tu equipo")
-            st.success("🔊 Sonido Tri-Tono ejecutado en los altavoces de tu equipo.")
-
-        if st.button("🎵 Tono 2: Chime Suave de Confirmación", width="stretch"):
-            emitir_alerta_sonora("chime", "🟢 Dalia Pro - Confirmación", "Operación lista para ejecución")
-            st.info("🎵 Chime de frecuencia ascendente emitido.")
-
-        if st.button("🚨 Tono 3: Alarma de Volatilidad Extrema", width="stretch"):
-            emitir_alerta_sonora("alarma", "💥 Dalia Pro - Alerta Volatilidad", "Breakout masivo detectado")
-            st.warning("🚨 Alarma de alta frecuencia emitida.")
-
-    with col_hw2:
-        st.markdown("### 📱 Notificaciones Nativas & Háptica")
-        st.write("Prueba los avisos emergentes nativos de tu sistema operativo (Windows Action Center, macOS, iOS, Android):")
-
-        js_permisos = """
-        <script>
-        function requestNativePerms() {
-            if ("Notification" in window) {
-                Notification.requestPermission().then(function(permission) {
-                    alert("Estado de Notificaciones Nativas del Equipo: " + permission);
-                });
-            } else {
-                alert("Este navegador no soporta notificaciones nativas del sistema.");
-            }
-        }
-        </script>
-        <button onclick="requestNativePerms()" style="background:#6366f1; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:bold; cursor:pointer; width:100%;">
-            🛡️ Activar Permiso de Notificaciones Nativas del Sistema
-        </button>
-        """
-        components.html(js_permisos, height=60)
-
-        if st.button("📳 Probar Vibración Háptica + Banner en Vivo", width="stretch"):
-            emitir_alerta_sonora("institucional", "📳 Dalia Pro - Háptica", "Vibración y aviso del sistema ejecutados en tu equipo")
-            st.success("📳 Patron de vibración y notificación nativa enviados a tu dispositivo.")
+    st.subheader("🔊 Módulo de Alertas Hardware Directas")
+    st.write("Prueba de integración de sonido, respuesta háptica y notificaciones del sistema operativo.")
+    
+    h_col1, h_col2, h_col3 = st.columns(3)
+    if h_col1.button("🔔 Probar Chime Ejecución"):
+        emitir_alerta_sonora("chime", "⚡ Orden Ejecutada", "Prueba de tono de confirmación de orden.")
+    if h_col2.button("🚨 Probar Alarma Institucional"):
+        emitir_alerta_sonora("alarma", "🚨 Alerta Crítica", "Prueba de tono de alerta de alta prioridad.")
+    if h_col3.button("🎵 Probar Tono Genérico"):
+        emitir_alerta_sonora("institucional", "ℹ️ Notificación Dalia Pro", "Prueba de tono estándar.")
 
 with tab_journal:
-    st.subheader("📒 Pillar V: Diario de Trading, Paper Trading & VaR de Cartera")
+    st.subheader("📒 Diario de Operaciones & Paper Trading Engine")
     
-    # Paper Trading Account Summary
-    st.markdown("### 💼 Portafolio de Paper Trading en Vivo")
-    pk1, pk2, pk3 = st.columns(3)
-    pk1.metric("Balance de Cuenta ($)", f"${st.session_state['cash_balance']:,.2f}")
-    pk2.metric("Posiciones Abiertas", len(st.session_state['paper_positions']))
-    
-    # Calculate total P&L
-    unrealized_pnl = 0.0
-    if st.session_state['paper_positions'] and not data.empty:
-        curr_p = float(data['Close'].iloc[-1])
-        for pos in st.session_state['paper_positions']:
-            diff = (curr_p - pos['Precio']) if pos['Accion'] == "CALL" else (pos['Precio'] - curr_p)
-            unrealized_pnl += diff * pos.get('Cantidad', 1)
-            
-    pk3.metric("P&L No Realizado ($)", f"${unrealized_pnl:,.2f}", delta=f"{'🟢' if unrealized_pnl>=0 else '🔴'}")
+    j_col1, j_col2 = st.columns(2)
+    with j_col1:
+        st.markdown("### 📊 Balance de Cuenta Paper Trading")
+        st.metric("Balance Disponible", f"${st.session_state['cash_balance']:,.2f}")
+        st.metric("Posiciones Activas", len(st.session_state['paper_positions']))
+        
+    with j_col2:
+        st.markdown("### 📜 Historial de Ejecuciones")
+        if st.session_state['execution_log']:
+            st.dataframe(pd.DataFrame(st.session_state['execution_log']))
+        else:
+            st.info("No hay registros de ejecuciones en esta sesión.")
 
-    if st.session_state['execution_log']:
-        st.markdown("---")
-        st.markdown("### ⚡ Historial de Órdenes Enviadas al Broker / Paper Engine")
-        df_exec = pd.DataFrame(st.session_state['execution_log'])
-        st.dataframe(df_exec, width="stretch")
-        
-        csv_exec = df_exec.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Exportar Registro de Órdenes a CSV",
-            data=csv_exec,
-            file_name=f"dalia_pro_execution_log_{datetime.date.today()}.csv",
-            mime="text/csv"
-        )
-        
-    st.markdown("---")
-    st.markdown("### 📝 Diario Personal de Operaciones")
-    with st.form("form_j"):
-        fc1, fc2 = st.columns(2)
-        j_t = fc1.text_input("Ticker", value=ticker)
-        j_p = fc2.number_input("Precio Entrada ($)", value=float(data['Close'].iloc[-1]) if not data.empty else 100.0)
-        j_notes = st.text_input("Notas / Razón de Entrada")
-        if st.form_submit_button("Guardar en Diario"):
-            st.session_state['journal'].append({'Fecha': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), 'Ticker': j_t, 'Precio': j_p, 'Notas': j_notes})
-            st.success("Guardado correctamente en la sesión.")
-            
-    if st.session_state['journal']:
-        df_j = pd.DataFrame(st.session_state['journal'])
-        st.dataframe(df_j, width="stretch")
-        csv_j = df_j.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Exportar Diario de Trading a CSV",
-            data=csv_j,
-            file_name=f"dalia_pro_trading_journal_{datetime.date.today()}.csv",
-            mime="text/csv"
-        )
+with tab_roadmap:
+    st.subheader("🗺️ Hoja de Ruta Sugerida Dalia Pro Engine")
+    
+    st.markdown("""
+        <div class="roadmap-card">
+            <h3 style="color:#a5b4fc; margin-top:0;">🚀 Fase 1: Integración Fix API & IBKR TWS Bridge</h3>
+            <p style="color:#cbd5e1;">Conexión directa vía sockets TCP/FIX para transmisión sub-milisegundo de órdenes bracket (Take-Profit / Stop-Loss dinámico en hardware local).</p>
+        </div>
+        <div class="roadmap-card">
+            <h3 style="color:#a5b4fc; margin-top:0;">🧠 Fase 2: Redes Neuronales LSTM & Transformer Signal Engine</h3>
+            <p style="color:#cbd5e1;">Implementación de aprendizaje profundo supervisado para predicción de volatilidad implícita y compresión de spreads en vencimientos 0DTE.</p>
+        </div>
+        <div class="roadmap-card">
+            <h3 style="color:#a5b4fc; margin-top:0;">🌐 Fase 3: Cluster Multi-Agente Distribuido</h3>
+            <p style="color:#cbd5e1;">Despliegue de agentes autónomos especializados (Order Flow Agent, Macro Regime Agent, Risk Manager Agent) coordinados por consenso síncrono.</p>
+        </div>
+    """, unsafe_allow_html=True)
