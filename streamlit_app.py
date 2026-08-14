@@ -9,7 +9,13 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image
-from textblob import TextBlob  # Análisis de sentimiento NLP
+
+# Importación segura de TextBlob para evitar caídas si falta la dependencia
+try:
+    from textblob import TextBlob
+    TEXTBLOB_AVAILABLE = True
+except ImportError:
+    TEXTBLOB_AVAILABLE = False
 
 # =====================================================================
 # CONFIGURACIÓN DE PÁGINA E ICONO PWA (Dalia Pro-Trading)
@@ -227,8 +233,10 @@ def filtrar_opcion_delta(delta_estimado: float) -> bool:
 # =====================================================================
 def get_market_sentiment(symbol):
     noticias_ejemplo = f"Mercado para {symbol} experimenta estabilidad, con flujos institucionales moderados y perspectivas macroeconómicas equilibradas."
-    analysis = TextBlob(noticias_ejemplo)
-    return float(analysis.sentiment.polarity)
+    if TEXTBLOB_AVAILABLE:
+        analysis = TextBlob(noticias_ejemplo)
+        return float(analysis.sentiment.polarity)
+    return 0.0
 
 def check_correlation_risk(new_symbol):
     correlations = {
@@ -352,10 +360,7 @@ def construir_grafico_avanzado(df, symbol):
 
     fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Precio'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], mode='lines', name='Banda Superior', line=dict(color='rgba(173, 216, 230, 0.5)', width=1)), row=1, col=1)
-    
-    # [CORREGIDO AQUÍ] Eliminado el duplicado del argumento 'name'
     fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], mode='lines', name='Canal Bollinger', line=dict(color='rgba(173, 216, 230, 0.5)', width=1), fill='tonexty', fillcolor='rgba(173, 216, 230, 0.05)'), row=1, col=1)
-    
     fig.add_trace(go.Scatter(x=df.index, y=df['BB_Middle'], mode='lines', name='Media Bollinger', line=dict(color='#29B6F6', width=1)), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['Support'], mode='lines', name='Soporte IA', line=dict(color='#00E676', dash='dot')), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['Resistance'], mode='lines', name='Resistencia IA', line=dict(color='#FF5252', dash='dot')), row=1, col=1)
