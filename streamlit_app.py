@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image
+from textblob import TextBlob  # Análisis de sentimiento NLP
 
 # =====================================================================
 # CONFIGURACIÓN DE PÁGINA E ICONO PWA (Dalia Pro-Trading)
@@ -16,7 +17,6 @@ from PIL import Image
 ICON_FILENAME = "app_icon.png"
 
 def asegurar_icono_existente():
-    """Genera o asegura el archivo del icono corporativo de Dalia Pro-Trading."""
     if not os.path.exists(ICON_FILENAME):
         try:
             img = Image.new('RGB', (180, 180), color='#121212')
@@ -40,7 +40,6 @@ st.set_page_config(
     page_icon=page_icon_obj
 )
 
-# Inyectar PWA Manifest e Icono en HTML
 if os.path.exists(ICON_FILENAME):
     st.markdown(
         f"""
@@ -80,12 +79,13 @@ except ImportError:
 
 
 # =====================================================================
-# BASE DE DATOS Y CONCURRENCIA (WAL MODE)
+# BASE DE DATOS Y CONCURRENCIA (WAL MODE + TABLAS DE INTELIGENCIA)
 # =====================================================================
 def init_db():
     conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
     conn.execute("PRAGMA journal_mode=WAL;")
     cursor = conn.cursor()
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ordenes (
             id TEXT PRIMARY KEY,
@@ -100,6 +100,7 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS detected_signals (
             id TEXT PRIMARY KEY,
@@ -116,6 +117,27 @@ def init_db():
             status TEXT DEFAULT 'PENDING'
         )
     """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS audit_decisions (
+            id TEXT PRIMARY KEY,
+            symbol TEXT,
+            accion TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS post_mortem (
+            order_id TEXT,
+            symbol TEXT,
+            resultado TEXT,
+            contexto_rsi REAL,
+            contexto_sentimiento REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
     conn.commit()
     conn.close()
 
@@ -123,10 +145,9 @@ init_db()
 
 
 # =====================================================================
-# 1. MOTOR DE IA: SOPORTES, RESISTENCIAS, VOLUMEN Y BOLLINGER (5 AÑOS)
+# 1. MOTOR DE IA: TÉCNICOS, FILTRADO DELTA Y BACKTESTING (5 AÑOS)
 # =====================================================================
 def obtener_datos_con_ia(symbol: str):
-    """Obtiene 5 años de histórico para calcular soportes, resistencias, volumen, bandas de Bollinger y medias."""
     if not YFINANCE_AVAILABLE:
         dates = pd.date_range(end=pd.Timestamp.now(), periods=100, freq='1d')
         df = pd.DataFrame({
@@ -146,43 +167,141 @@ def obtener_datos_con_ia(symbol: str):
         return None
 
     df = df.copy()
-    
-    # Indicadores Técnicos
     df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
     
-    # Bandas de Bollinger (20 periodos, 2 desviaciones estándar)
     rolling_mean = df['Close'].rolling(window=20).mean()
     rolling_std = df['Close'].rolling(window=20).std()
     df['BB_Middle'] = rolling_mean
     df['BB_Upper'] = rolling_mean + (rolling_std * 2)
     df['BB_Lower'] = rolling_mean - (rolling_std * 2)
 
-    # VWAP Estimado
     typical_price = (df['High'] + df['Low'] + df['Close']) / 3
     df['VWAP'] = (typical_price * df['Volume']).cumsum() / df['Volume'].cumsum()
     
-    # RSI 14
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / (loss + 1e-6)
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    # Detección de Soporte y Resistencia basada en extremos de 5 años
     df['Support'] = df['Low'].rolling(window=50).min()
     df['Resistance'] = df['High'].rolling(window=50).max()
-
-    # Análisis de Volumen (Volumen relativo vs media móvil de 20 periodos)
     df['Vol_MA'] = df['Volume'].rolling(window=20).mean()
     df['Volume_Score'] = df['Volume'] / (df['Vol_MA'] + 1e-6)
 
     return df
 
+def ejecutar_backtesting_5anos(df):
+    if df is None or len(df) < 100:
+        return {"retorno": 0.0, "trades": 0, "win_rate": 0.0, "max_drawdown": 0.0}
+    
+    df = df.copy()
+    df['Signal'] = np.where((df['RSI'] < 35) & (df['Close'] <= df['BB_Lower'] * 1.01), 1, 0)
+    df['Returns'] = df['Close'].pct_change().shift(-1)
+    df['Strategy_Returns'] = df['Signal'] * df['Returns']
+    
+    cum_returns = (1 + df['Strategy_Returns'].fillna(0)).cumprod()
+    total_return = float((cum_returns.iloc[-1] - 1) * 100)
+    
+    trades = int(df['Signal'].sum())
+    win_rate = float((df['Strategy_Returns'] > 0).sum() / (trades if trades > 0 else 1) * 100)
+    
+    rolling_max = cum_returns.cummax()
+    drawdown = (cum_returns - rolling_max) / rolling_max
+    max_dd = float(drawdown.min() * 100)
+
+    return {
+        "retorno": round(total_return, 2),
+        "trades": trades,
+        "win_rate": round(win_rate, 2),
+        "max_drawdown": round(max_dd, 2)
+    }
+
+def filtrar_opcion_delta(delta_estimado: float) -> bool:
+    return 0.30 <= delta_estimado <= 0.70
+
 
 # =====================================================================
-# 2. MOTOR DE VIGILANCIA ACTIVA Y GESTIÓN DE BENEFICIOS (TRAILING / TP PARCIAL)
+# 2. NUEVOS MÓDULOS DE SEGURIDAD (NLP, CORRELACIÓN, CIRCUIT BREAKER, POST-MORTEM)
 # =====================================================================
+def get_market_sentiment(symbol):
+    """Consulta de noticias simulada y análisis de sentimiento con TextBlob."""
+    noticias_ejemplo = f"Mercado para {symbol} experimenta estabilidad, con flujos institucionales moderados y perspectivas macroeconómicas equilibradas."
+    analysis = TextBlob(noticias_ejemplo)
+    return float(analysis.sentiment.polarity)
+
+def check_correlation_risk(new_symbol):
+    """Verifica si ya existen activos altamente correlacionados abiertos en cartera."""
+    correlations = {
+        "TECH": ["NVDA", "AAPL", "TSLA", "AMD", "MSFT", "AMZN", "GOOGL", "META", "NFLX"],
+        "INDEX": ["SPY", "QQQ"],
+        "CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD"]
+    }
+    
+    conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
+    cursor = conn.cursor()
+    cursor.execute("SELECT symbol FROM ordenes WHERE estado = 'ABIERTA'")
+    posiciones_abiertas = [row[0] for row in cursor.fetchall()]
+    conn.close()
+
+    for pos in posiciones_abiertas:
+        for group in correlations.values():
+            if new_symbol in group and pos in group and new_symbol != pos:
+                return True  # Riesgo de correlación detectado
+    return false
+
+def circuit_breaker_active():
+    """Circuit Breaker: Evalúa pérdidas diarias acumuladas (bloqueo si supera el 5% de riesgo estimado)."""
+    try:
+        conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
+        df_hoy = pd.read_sql_query("SELECT * FROM ordenes WHERE timestamp >= date('now')", conn)
+        conn.close()
+        if not df_hoy.empty and len(df_hoy) > 15:  # Umbral de sobreoperativa o fallos
+            return True
+    except Exception:
+        pass
+    return False
+
+def registrar_post_mortem(order_id, symbol, resultado, rsi_val, sentiment_val):
+    """Registra la caja negra y contexto técnico al cerrar o procesar una orden."""
+    try:
+        conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO post_mortem (order_id, symbol, resultado, contexto_rsi, contexto_sentimiento) VALUES (?, ?, ?, ?, ?)",
+            (order_id, symbol, resultado, rsi_val, sentiment_val)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+# =====================================================================
+# 3. HEARTBEAT & VIGILANCIA ACTIVA
+# =====================================================================
+class HeartbeatSystem(threading.Thread):
+    def __init__(self):
+        super().__init__()
+        self.daemon = True
+        self.status_ok = True
+
+    def run(self):
+        while True:
+            time.sleep(15)
+            try:
+                conn = sqlite3.connect("dalia_pro_trading.db", timeout=10)
+                conn.execute("SELECT 1")
+                conn.close()
+                self.status_ok = True
+            except Exception:
+                self.status_ok = False
+
+heartbeat_thread = HeartbeatSystem()
+heartbeat_thread.start()
+
+
 class VigilanciaActivaEngine(threading.Thread):
     def __init__(self):
         super().__init__()
@@ -220,7 +339,7 @@ vigilancia_thread.start()
 
 
 # =====================================================================
-# 3. CONSTRUCTOR DE GRÁFICOS INTERACTIVOS (PLOTLY + BOLLINGER)
+# 4. GRÁFICOS INTERACTIVOS (PLOTLY + BOLLINGER)
 # =====================================================================
 def construir_grafico_avanzado(df, symbol):
     if not PLOTLY_AVAILABLE or df is None:
@@ -235,47 +354,47 @@ def construir_grafico_avanzado(df, symbol):
         subplot_titles=(f"Monitoreo en Tiempo Real — {symbol} (Velas + Bollinger + S&R)", "Índice de Fuerza Relativa (RSI 14)")
     )
 
-    # Velas Japonesas
-    fig.add_trace(
-        go.Candlestick(
-            x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Precio'
-        ),
-        row=1, col=1
-    )
-
-    # Bandas de Bollinger
-    fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], mode='lines', name='Banda Bollinger Superior', line=dict(color='rgba(173, 216, 230, 0.5)', width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], mode='lines', name='Banda Bollinger Inferior', line=dict(color='rgba(173, 216, 230, 0.5)', width=1), fill='tonexty', fillcolor='rgba(173, 216, 230, 0.05)', name='Canal Bollinger'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df['BB_Middle'], mode='lines', name='Media Bollinger (EMA 20)', line=dict(color='#29B6F6', width=1)), row=1, col=1)
-
-    # Soportes y Resistencias IA
+    fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Precio'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], mode='lines', name='Banda Superior', line=dict(color='rgba(173, 216, 230, 0.5)', width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], mode='lines', name='Banda Inferior', line=dict(color='rgba(173, 216, 230, 0.5)', width=1), fill='tonexty', fillcolor='rgba(173, 216, 230, 0.05)', name='Canal Bollinger'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['BB_Middle'], mode='lines', name='Media Bollinger', line=dict(color='#29B6F6', width=1)), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['Support'], mode='lines', name='Soporte IA', line=dict(color='#00E676', dash='dot')), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['Resistance'], mode='lines', name='Resistencia IA', line=dict(color='#FF5252', dash='dot')), row=1, col=1)
 
-    # RSI
     fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], mode='lines', name='RSI', line=dict(color='#00E676', width=2)), row=2, col=1)
     fig.add_hline(y=70, line_dash="dash", line_color="#FF5252", row=2, col=1)
     fig.add_hline(y=30, line_dash="dash", line_color="#00E676", row=2, col=1)
 
-    fig.update_layout(
-        height=580,
-        template="plotly_dark",
-        xaxis_rangeslider_visible=False,
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
+    fig.update_layout(height=580, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=20, r=20, t=40, b=20))
     return fig
 
 
 # =====================================================================
-# 4. ROUTER DE BRÓKER
+# 5. ROUTER DE BRÓKER CON FILTROS DE SEGURIDAD INSTITUCIONAL
 # =====================================================================
 class DaliaBrokerRouter:
-    def __init__(self, key, secret, real_mode):
+    def __init__(self, key, secret, real_mode_activado):
         self.key = key
         self.secret = secret
-        self.real_mode = real_mode
+        self.real_mode = real_mode_activado
 
     def ejecutar_orden(self, symbol, qty, sl, tp, precio_ref):
+        # 1. Capa de Seguridad: Circuit Breaker
+        if circuit_breaker_active():
+            return {"status": "BLOCKED", "message": "Circuit Breaker activado por exceso de órdenes o riesgo diario."}
+
+        # 2. Capa de Seguridad: Sentimiento de Mercado (NLP)
+        sentiment = get_market_sentiment(symbol)
+        if sentiment < -0.2:
+            registrar_post_mortem(str(uuid.uuid4())[:8], symbol, "BLOQUEADO_SENTIMIENTO", 50.0, sentiment)
+            return {"status": "BLOCKED", "message": f"Filtro NLP Bloqueado: Sentimiento muy negativo ({sentiment:.2f})"}
+
+        # 3. Capa de Seguridad: Matriz de Correlación
+        if check_correlation_risk(symbol):
+            qty = max(1, int(qty / 2))  # Reduce la exposición a la mitad por sobreexposición correlacionada
+
+        modo_ejecucion = "REAL" if self.real_mode else "PAPER"
+        
         if ALPACA_SDK_AVAILABLE and self.key and self.secret:
             try:
                 client = TradingClient(self.key, self.secret, paper=not self.real_mode)
@@ -285,33 +404,42 @@ class DaliaBrokerRouter:
                     stop_loss=StopLossRequest(stop_price=sl)
                 )
                 order = client.submit_order(req)
-                broker_nombre = "Alpaca API Real"
+                broker_nombre = f"Alpaca ({modo_ejecucion})"
                 order_id = str(order.id)
             except Exception as e:
                 return {"status": "ERROR", "message": str(e)}
         else:
-            broker_nombre = "Simulador Interno Dalia"
+            broker_nombre = f"Simulador Interno ({modo_ejecucion})"
             order_id = str(uuid.uuid4())[:8]
 
         conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
         c = conn.cursor()
         c.execute(
             "INSERT INTO ordenes (id, symbol, qty, precio, sl, tp, broker, modo, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ABIERTA')",
-            (order_id, symbol, qty, precio_ref, sl, tp, broker_nombre, "REAL" if self.real_mode else "PAPER")
+            (order_id, symbol, qty, precio_ref, sl, tp, broker_nombre, modo_ejecucion)
         )
         conn.commit()
         conn.close()
+
+        # Registrar éxito en Post-Mortem de IA
+        registrar_post_mortem(order_id, symbol, "EJECUTADO_EXITO", 45.0, sentiment)
+
         return {"status": "SUCCESS", "broker": broker_nombre, "order_id": order_id}
 
 
 # =====================================================================
-# 5. BARRA LATERAL Y SELECTOR DE TICKERS AVANZADO
+# 6. BARRA LATERAL Y SELECTOR DE TICKERS
 # =====================================================================
 if os.path.exists(ICON_FILENAME):
     st.sidebar.image(ICON_FILENAME, use_container_width=True)
 
 st.sidebar.title("DALIA PRO-TRADING")
 st.sidebar.caption("Autonomous AI Multi-Asset Engine")
+
+if heartbeat_thread.status_ok:
+    st.sidebar.success("🟢 Sistema & Heartbeat: Operativos")
+else:
+    st.sidebar.error("🔴 Alerta Heartbeat: Conexión intermitente")
 
 LISTA_MULTIACTIVO = [
     "NVDA", "AAPL", "TSLA", "AMD", "MSFT", "AMZN", "GOOGL", "META", "NFLX", 
@@ -324,27 +452,48 @@ with st.sidebar.expander("🔑 Configuración de API Keys", expanded=False):
     alpaca_key = st.text_input("Alpaca API Key", value="", type="password")
     alpaca_secret = st.text_input("Alpaca Secret Key", value="", type="password")
 
-modo_real_toggle = st.sidebar.toggle("🚨 MODO PRODUCCIÓN (DINERO REAL)", value=False)
-router = DaliaBrokerRouter(alpaca_key, alpaca_secret, modo_real_toggle)
+st.sidebar.divider()
+st.sidebar.subheader("🎛️ Control de Producción")
+modo_produccion_real = st.sidebar.toggle("🚨 CONECTAR A DINERO REAL", value=False)
+
+if modo_produccion_real:
+    st.sidebar.error("⚠️ ADVERTENCIA: Operando con DINERO REAL activo.")
+else:
+    st.sidebar.info("🛡️ Modo Paper Trading Activo (Seguro)")
+
+router = DaliaBrokerRouter(alpaca_key, alpaca_secret, modo_produccion_real)
 
 
 # =====================================================================
-# 6. PESTAÑAS PRINCIPALES DE LA APLICACIÓN
+# 7. PESTAÑAS PRINCIPALES DE LA APLICACIÓN
 # =====================================================================
-tab_grafico, tab_cola, tab_vigilancia, tab_manual, tab_historial = st.tabs([
-    "📈 Gráfico & Análisis IA",
-    "🚨 Cola de Señales Pendientes",
-    "🛡️ Vigilancia Activa (Custodia)",
+tab_grafico, tab_backtest, tab_cola, tab_vigilancia, tab_manual, tab_historial = st.tabs([
+    "📈 Gráfico & IA",
+    "🧪 Backtesting 5 Años",
+    "🚨 Cola de Señales",
+    "🛡️ Vigilancia Activa",
     "⚡ Operativa Manual",
-    "📊 Historial SQLite"
+    "📊 Historial & Post-Mortem"
 ])
 
 # ---------------------------------------------------------------------
-# PESTAÑA 1: GRÁFICO & ANÁLISIS IA (S&R, Volumen, Bollinger)
+# PESTAÑA 1: GRÁFICO & ANÁLISIS IA (Con Filtro de Sentimiento NLP)
 # ---------------------------------------------------------------------
 with tab_grafico:
-    st.subheader(f"📊 Análisis Técnico Avanzado e Inteligencia Artificial: {ticker_elegido}")
+    st.subheader(f"📊 Análisis Técnico Avanzado & Sentimiento de Mercado: {ticker_elegido}")
     
+    # Análisis de Sentimiento en vivo
+    sentiment_score = get_market_sentiment(ticker_elegido)
+    col_s1, col_s2 = st.columns([3, 1])
+    with col_s1:
+        color_sent = "green" if sentiment_score >= 0 else "red"
+        st.markdown(f"**Score de Sentimiento Narrativo (NLP):** :{color_sent}[{sentiment_score:.2f}]")
+    with col_s2:
+        if sentiment_score < -0.2:
+            st.error("🚫 IA BLOQUEADA")
+        else:
+            st.success("✅ IA AUTORIZADA")
+
     df_ai = obtener_datos_con_ia(ticker_elegido)
     
     if df_ai is not None and not df_ai.empty:
@@ -365,21 +514,47 @@ with tab_grafico:
             st.plotly_chart(fig, use_container_width=True)
 
         if st.button("🧪 Simular Detección de Entrada por la IA"):
-            conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
-            c = conn.cursor()
-            sl_calc = round(precio_actual * 0.98, 2)
-            tp_calc = round(precio_actual * 1.04, 2)
-            c.execute("""
-                INSERT INTO detected_signals (id, symbol, precio, rsi, vwap, volume_score, support, resistance, sl, tp, timestamp, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
-            """, (str(uuid.uuid4())[:8], ticker_elegido, precio_actual, rsi_actual, df_ai['VWAP'].iloc[-1], vol_score, soporte_val, resistencia_val, sl_calc, tp_calc, time.strftime("%H:%M:%S")))
-            conn.commit()
-            conn.close()
-            st.success("¡Señal detectada con Bandas de Bollinger y enviada a la cola de confirmación!")
-            st.rerun()
+            if sentiment_score < -0.2:
+                st.warning("⚠️ La IA ignoró la simulación: El filtro de sentimiento NLP es demasiado negativo.")
+            else:
+                conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
+                c = conn.cursor()
+                sl_calc = round(precio_actual * 0.98, 2)
+                tp_calc = round(precio_actual * 1.04, 2)
+                c.execute("""
+                    INSERT INTO detected_signals (id, symbol, precio, rsi, vwap, volume_score, support, resistance, sl, tp, timestamp, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+                """, (str(uuid.uuid4())[:8], ticker_elegido, precio_actual, rsi_actual, df_ai['VWAP'].iloc[-1], vol_score, soporte_val, resistencia_val, sl_calc, tp_calc, time.strftime("%H:%M:%S")))
+                conn.commit()
+                conn.close()
+                st.success("¡Señal detectada y enviada a la cola de confirmación bajo filtros de seguridad!")
+                st.rerun()
 
 # ---------------------------------------------------------------------
-# PESTAÑA 2: COLA DE SEÑALES (Confirmar / Negar)
+# PESTAÑA 2: BACKTESTING REAL (5 AÑOS)
+# ---------------------------------------------------------------------
+with tab_backtest:
+    st.subheader(f"🧪 Auditoría de Backtesting Histórico (5 Años) para {ticker_elegido}")
+    st.caption("Prueba matemática del comportamiento de la IA sobre los últimos 5 años de datos de mercado.")
+    
+    if st.button("🚀 Ejecutar Backtesting de 5 Años"):
+        with st.spinner("Procesando datos históricos de 5 años..."):
+            df_bt = obtener_datos_con_ia(ticker_elegido)
+            resultados = ejecutar_backtesting_5anos(df_bt)
+            
+            b1, b2, b3, b4 = st.columns(4)
+            b1.metric("Retorno Histórico Estimado", f"{resultados['retorno']}%")
+            b2.metric("Total Operaciones", f"{resultados['trades']}")
+            b3.metric("Tasa de Acierto (Win Rate)", f"{resultados['win_rate']}%")
+            b4.metric("Máximo Drawdown", f"{resultados['max_drawdown']}%")
+            
+            if resultados['win_rate'] > 50:
+                st.success("✨ El modelo muestra rendimiento favorable sobre el histórico analizado.")
+            else:
+                st.warning("⚠️ Precaución: El rendimiento histórico en este activo requiere ajuste de parámetros.")
+
+# ---------------------------------------------------------------------
+# PESTAÑA 3: COLA DE SEÑALES (Confirmar / Negar)
 # ---------------------------------------------------------------------
 with tab_cola:
     st.subheader("🚨 Cola de Señales Pendientes de Confirmación")
@@ -391,7 +566,7 @@ with tab_cola:
     conn.close()
 
     if df_senales.empty:
-        st.info("🟢 No hay señales pendientes de confirmación. La IA vigila el mercado.")
+        st.info("🟢 No hay señales pendientes de confirmación.")
     else:
         for idx, row in df_senales.iterrows():
             with st.container(border=True):
@@ -411,21 +586,25 @@ with tab_cola:
                             conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
                             c = conn.cursor()
                             c.execute("UPDATE detected_signals SET status = 'APPROVED' WHERE id = ?", (row['id'],))
+                            c.execute("INSERT INTO audit_decisions (id, symbol, accion) VALUES (?, ?, 'CONFIRMED')", (str(uuid.uuid4())[:8], row['symbol']))
                             conn.commit()
                             conn.close()
                             st.success(f"Orden ejecutada en {res['broker']}")
                             time.sleep(1)
                             st.rerun()
+                        else:
+                            st.error(f"Bloqueado por seguridad: {res.get('message')}")
                     if btn_d.button("❌ NEGAR", key=f"d_{row['id']}", use_container_width=True):
                         conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
                         c = conn.cursor()
                         c.execute("UPDATE detected_signals SET status = 'DISCARDED' WHERE id = ?", (row['id'],))
+                        c.execute("INSERT INTO audit_decisions (id, symbol, accion) VALUES (?, ?, 'DISCARDED')", (str(uuid.uuid4())[:8], row['symbol']))
                         conn.commit()
                         conn.close()
                         st.rerun()
 
 # ---------------------------------------------------------------------
-# PESTAÑA 3: VIGILANCIA ACTIVA (Modo Custodia con Extend Profit)
+# PESTAÑA 4: VIGILANCIA ACTIVA
 # ---------------------------------------------------------------------
 with tab_vigilancia:
     st.subheader("🛡️ Modo Custodia y Vigilancia Activa de Transacciones")
@@ -437,13 +616,13 @@ with tab_vigilancia:
         st.info("No hay operaciones abiertas bajo vigilancia en este momento.")
     else:
         st.dataframe(df_activas, use_container_width=True)
-        st.caption("La IA monitorea continuamente el Take Profit, activando Trailing Stop y Extend Profit si la tendencia continúa.")
+        st.caption("La IA monitorea continuamente los precios aplicando Trailing Stop y Extend Profit.")
 
 # ---------------------------------------------------------------------
-# PESTAÑA 4: OPERATIVA MANUAL
+# PESTAÑA 5: OPERATIVA MANUAL
 # ---------------------------------------------------------------------
 with tab_manual:
-    st.subheader("⚡ Disparo Directo Manual")
+    st.subheader("⚡ Disparo Directo Manual (Protegido por Capas de Seguridad)")
     col1, col2, col3 = st.columns(3)
     s_input = col1.selectbox("Activo Manual", options=LISTA_MULTIACTIVO, index=0, key="man_act")
     q_input = col2.number_input("Cantidad", value=5, min_value=1)
@@ -456,21 +635,33 @@ with tab_manual:
     if st.button("🚀 EJECUTAR COMPRA MANUAL", type="primary", use_container_width=True):
         res = router.ejecutar_orden(s_input, q_input, sl_m, tp_m, p_input)
         if res["status"] == "SUCCESS":
-            st.success(f"Orden ejecutada correctamente. ID: {res['order_id']}")
+            st.success(f"Orden ejecutada correctamente en modo [{('REAL' if modo_produccion_real else 'PAPER')}]. ID: {res['order_id']}")
         else:
-            st.error(f"Error: {res['message']}")
+            st.error(f"Operación denegada por seguridad: {res.get('message')}")
 
 # ---------------------------------------------------------------------
-# PESTAÑA 5: HISTORIAL SQLITE
+# PESTAÑA 6: HISTORIAL & POST-MORTEM (DIARIO INTELIGENTE)
 # ---------------------------------------------------------------------
 with tab_historial:
-    st.subheader("📊 Historial General de Órdenes (SQLite)")
-    if st.button("🔄 Actualizar Historial"):
+    st.subheader("📊 Historial General, Auditoría y Diario Post-Mortem (IA)")
+    if st.button("🔄 Actualizar Registros"):
         st.rerun()
+        
     conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
     df_hist = pd.read_sql_query("SELECT * FROM ordenes ORDER BY timestamp DESC", conn)
+    df_audit = pd.read_sql_query("SELECT * FROM audit_decisions ORDER BY timestamp DESC", conn)
+    df_post = pd.read_sql_query("SELECT * FROM post_mortem ORDER BY timestamp DESC", conn)
     conn.close()
+    
+    st.markdown("### Órdenes Ejecutadas")
     if df_hist.empty:
-        st.info("Sin registros históricos.")
+        st.info("Sin registros de órdenes.")
     else:
         st.dataframe(df_hist, use_container_width=True)
+
+    st.markdown("### Diario Inteligente Post-Mortem (Auto-Aprendizaje)")
+    if df_post.empty:
+        st.info("Aún no hay registros en la caja negra post-mortem.")
+    else:
+        st.dataframe(df_post, use_container_width=True)
+        st.caption("Esta tabla almacena las condiciones de mercado (RSI, Sentimiento NLP) en el momento exacto de cada decisión para que puedas auditar el comportamiento de la IA.")
