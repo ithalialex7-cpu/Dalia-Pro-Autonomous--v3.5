@@ -223,16 +223,14 @@ def filtrar_opcion_delta(delta_estimado: float) -> bool:
 
 
 # =====================================================================
-# 2. NUEVOS MÓDULOS DE SEGURIDAD (NLP, CORRELACIÓN, CIRCUIT BREAKER, POST-MORTEM)
+# 2. MÓDULOS DE SEGURIDAD (NLP, CORRELACIÓN, CIRCUIT BREAKER, POST-MORTEM)
 # =====================================================================
 def get_market_sentiment(symbol):
-    """Consulta de noticias simulada y análisis de sentimiento con TextBlob."""
     noticias_ejemplo = f"Mercado para {symbol} experimenta estabilidad, con flujos institucionales moderados y perspectivas macroeconómicas equilibradas."
     analysis = TextBlob(noticias_ejemplo)
     return float(analysis.sentiment.polarity)
 
 def check_correlation_risk(new_symbol):
-    """Verifica si ya existen activos altamente correlacionados abiertos en cartera."""
     correlations = {
         "TECH": ["NVDA", "AAPL", "TSLA", "AMD", "MSFT", "AMZN", "GOOGL", "META", "NFLX"],
         "INDEX": ["SPY", "QQQ"],
@@ -248,23 +246,21 @@ def check_correlation_risk(new_symbol):
     for pos in posiciones_abiertas:
         for group in correlations.values():
             if new_symbol in group and pos in group and new_symbol != pos:
-                return True  # Riesgo de correlación detectado
-    return false
+                return True
+    return False
 
 def circuit_breaker_active():
-    """Circuit Breaker: Evalúa pérdidas diarias acumuladas (bloqueo si supera el 5% de riesgo estimado)."""
     try:
         conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
         df_hoy = pd.read_sql_query("SELECT * FROM ordenes WHERE timestamp >= date('now')", conn)
         conn.close()
-        if not df_hoy.empty and len(df_hoy) > 15:  # Umbral de sobreoperativa o fallos
+        if not df_hoy.empty and len(df_hoy) > 15:
             return True
     except Exception:
         pass
     return False
 
 def registrar_post_mortem(order_id, symbol, resultado, rsi_val, sentiment_val):
-    """Registra la caja negra y contexto técnico al cerrar o procesar una orden."""
     try:
         conn = sqlite3.connect("dalia_pro_trading.db", timeout=30)
         cursor = conn.cursor()
@@ -356,7 +352,10 @@ def construir_grafico_avanzado(df, symbol):
 
     fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Precio'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['BB_Upper'], mode='lines', name='Banda Superior', line=dict(color='rgba(173, 216, 230, 0.5)', width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], mode='lines', name='Banda Inferior', line=dict(color='rgba(173, 216, 230, 0.5)', width=1), fill='tonexty', fillcolor='rgba(173, 216, 230, 0.05)', name='Canal Bollinger'), row=1, col=1)
+    
+    # [CORREGIDO AQUÍ] Eliminado el duplicado del argumento 'name'
+    fig.add_trace(go.Scatter(x=df.index, y=df['BB_Lower'], mode='lines', name='Canal Bollinger', line=dict(color='rgba(173, 216, 230, 0.5)', width=1), fill='tonexty', fillcolor='rgba(173, 216, 230, 0.05)'), row=1, col=1)
+    
     fig.add_trace(go.Scatter(x=df.index, y=df['BB_Middle'], mode='lines', name='Media Bollinger', line=dict(color='#29B6F6', width=1)), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['Support'], mode='lines', name='Soporte IA', line=dict(color='#00E676', dash='dot')), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['Resistance'], mode='lines', name='Resistencia IA', line=dict(color='#FF5252', dash='dot')), row=1, col=1)
@@ -379,19 +378,16 @@ class DaliaBrokerRouter:
         self.real_mode = real_mode_activado
 
     def ejecutar_orden(self, symbol, qty, sl, tp, precio_ref):
-        # 1. Capa de Seguridad: Circuit Breaker
         if circuit_breaker_active():
             return {"status": "BLOCKED", "message": "Circuit Breaker activado por exceso de órdenes o riesgo diario."}
 
-        # 2. Capa de Seguridad: Sentimiento de Mercado (NLP)
         sentiment = get_market_sentiment(symbol)
         if sentiment < -0.2:
             registrar_post_mortem(str(uuid.uuid4())[:8], symbol, "BLOQUEADO_SENTIMIENTO", 50.0, sentiment)
             return {"status": "BLOCKED", "message": f"Filtro NLP Bloqueado: Sentimiento muy negativo ({sentiment:.2f})"}
 
-        # 3. Capa de Seguridad: Matriz de Correlación
         if check_correlation_risk(symbol):
-            qty = max(1, int(qty / 2))  # Reduce la exposición a la mitad por sobreexposición correlacionada
+            qty = max(1, int(qty / 2))
 
         modo_ejecucion = "REAL" if self.real_mode else "PAPER"
         
@@ -421,7 +417,6 @@ class DaliaBrokerRouter:
         conn.commit()
         conn.close()
 
-        # Registrar éxito en Post-Mortem de IA
         registrar_post_mortem(order_id, symbol, "EJECUTADO_EXITO", 45.0, sentiment)
 
         return {"status": "SUCCESS", "broker": broker_nombre, "order_id": order_id}
@@ -477,12 +472,11 @@ tab_grafico, tab_backtest, tab_cola, tab_vigilancia, tab_manual, tab_historial =
 ])
 
 # ---------------------------------------------------------------------
-# PESTAÑA 1: GRÁFICO & ANÁLISIS IA (Con Filtro de Sentimiento NLP)
+# PESTAÑA 1: GRÁFICO & ANÁLISIS IA
 # ---------------------------------------------------------------------
 with tab_grafico:
     st.subheader(f"📊 Análisis Técnico Avanzado & Sentimiento de Mercado: {ticker_elegido}")
     
-    # Análisis de Sentimiento en vivo
     sentiment_score = get_market_sentiment(ticker_elegido)
     col_s1, col_s2 = st.columns([3, 1])
     with col_s1:
